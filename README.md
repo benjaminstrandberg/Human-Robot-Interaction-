@@ -1,3 +1,63 @@
-# Human-Robot Interaction
+# Reachy Mini Weekly Wellbeing Check-in
 
-The aim of the project is to make an interactive robot that can conduct a short weekly interview about mental health to a university student. The interview will focus on how the student is doing in his/her studies. Are there many assignments? Which is their current motivation? The student will use the robot to keep track of their mental health.
+## Setup
+
+Clone the repository:
+
+```bash
+git clone <repository-url>
+cd <repository-folder>
+```
+
+Create virtual environment:
+
+### macOS / Linux
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### Windows
+
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## Run the project
+
+IMPORTANT:
+
+Run with:
+
+```bash
+mjpython main.py
+```
+
+NOT:
+
+```bash
+python main.py
+```
+
+---
+
+## Notes
+
+* Two windows will open:
+
+  * MuJoCo Reachy simulation
+  * Chat/subtitle interface
+
+* The chat window should be placed near the robot simulation window.
+
+* Close either window to shut down the whole application.
