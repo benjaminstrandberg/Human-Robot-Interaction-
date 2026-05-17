@@ -13,6 +13,8 @@ import mujoco.viewer
 import numpy as np
 import reachy_mini
 
+from classifier import classify_answer_llm
+
 from script_data import (
     QUESTIONS,
     NEGATIVE_KEYWORDS,
@@ -32,6 +34,13 @@ MODEL_PATH = REACHY_DIR / "descriptions/reachy_mini/mjcf/scene.xml"
 
 
 def classify_answer(text):
+    
+    llm_label = classify_answer_llm(text);
+    
+    if llm_label is not None:
+        print(f"[Classifier] LLM Label: {llm_label}")
+        return llm_label
+    
     text = text.lower()
 
     if any(word in text for word in NEGATIVE_KEYWORDS):

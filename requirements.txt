@@ -42,6 +42,7 @@ idna==3.14
 ifaddr==0.2.0
 importlib_resources==7.1.0
 Jinja2==3.1.6
+jiter==0.14.0
 libusb-package==1.0.26.3
 log-throttling==0.0.3
 markdown-it-py==4.2.0
@@ -50,6 +51,7 @@ mdurl==0.1.2
 mujoco==3.3.0
 multidict==6.7.1
 numpy==2.4.4
+openai==2.37.0
 opencv-python==4.13.0.92
 packaging==26.2
 playsound==1.2.2
