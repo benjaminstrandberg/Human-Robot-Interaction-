@@ -68,6 +68,7 @@ class OverlayServer:
         while True:
             try:
                 data = conn.recv(4096).decode("utf-8")
+
                 if not data:
                     break
 
@@ -107,7 +108,10 @@ class ReachyInterview:
         self.data = mujoco.MjData(self.model)
 
         self.condition = "empathetic"
+
         self.motion = "idle"
+        self.motion_start_time = time.time()
+
         self.question_index = -1
         self.awaiting_input = False
         self.next_question_time = None
@@ -131,7 +135,6 @@ class ReachyInterview:
             "stewart_6",
         ]:
             jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, name)
-
             if jid >= 0:
                 self.joint_ids[name] = jid
 
@@ -142,6 +145,13 @@ class ReachyInterview:
             [str(python_bin), "overlay_ui.py", str(PORT)],
             cwd=str(Path(__file__).parent),
         )
+
+    def set_motion(self, motion):
+        self.motion = motion
+        self.motion_start_time = time.time()
+
+    def elapsed_motion(self):
+        return time.time() - self.motion_start_time
 
     def set_joint(self, name, value):
         if name not in self.joint_ids:
@@ -155,30 +165,202 @@ class ReachyInterview:
         for name in self.joint_ids:
             self.set_joint(name, 0.0)
 
-    def update_motion(self):
-        t = time.time() - self.start_time
+    def smoothstep(self, x):
+        x = max(0.0, min(1.0, x))
+        return x * x * (3.0 - 2.0 * x)
 
-        if self.motion == "negative":
-            self.set_joint("yaw_body", -0.18)
-            self.set_joint("stewart_1", 0.01)
-            self.set_joint("stewart_2", -0.01)
-            self.set_joint("stewart_3", 0.008)
-            self.set_joint("stewart_4", -0.008)
-            self.set_joint("right_antenna", 0.25 * np.sin(t * 1.4))
-            self.set_joint("left_antenna", -0.25 * np.sin(t * 1.4))
+    def damped_sine(self, t, speed=1.0, decay=1.0):
+        return np.sin(t * np.pi * 2.0 * speed) * np.exp(-t * decay)
+
+    def apply_head_platform(self, pitch=0.0, roll=0.0):
+        """
+        Approximate pitch/roll using Reachy Mini's Stewart-platform joints.
+        Values are deliberately in a visible-but-not-insane range.
+        """
+        self.set_joint("stewart_1", 0.050 * pitch + 0.035 * roll)
+        self.set_joint("stewart_2", 0.050 * pitch - 0.035 * roll)
+        self.set_joint("stewart_3", -0.040 * pitch + 0.035 * roll)
+        self.set_joint("stewart_4", -0.040 * pitch - 0.035 * roll)
+        self.set_joint("stewart_5", 0.028 * pitch)
+        self.set_joint("stewart_6", -0.028 * pitch)
+
+    def neutral_pose(self):
+        """
+        Condition 2:
+        Cold mechanical baseline.
+        Direct gaze, no antennas, no head motion.
+        """
+        self.reset_pose()
+
+    def question_pose(self):
+        """
+        Empathetic condition while asking questions:
+        mostly neutral/direct, but with tiny life.
+        Keeps attention on the question instead of emotional reaction.
+        """
+        t = self.elapsed_motion()
+        self.reset_pose()
+
+        self.set_joint("yaw_body", 0.015 * np.sin(t * 0.7))
+        self.apply_head_platform(
+            pitch=0.04 * np.sin(t * 0.9),
+            roll=0.025 * np.sin(t * 0.6),
+        )
+
+        self.set_joint("right_antenna", 0.035 * np.sin(t * 0.9))
+        self.set_joint("left_antenna", 0.035 * np.sin(t * 0.9 + 0.2))
+
+    def intro_positive_pose(self):
+        """
+        Script: big smile + slight head nod.
+        We approximate face with a friendly greeting nod and warm antenna lift.
+        """
+        t = self.elapsed_motion()
+        self.reset_pose()
+
+        nod = self.damped_sine(t, speed=0.95, decay=0.85)
+
+        self.set_joint("yaw_body", 0.025 * np.sin(t * 0.8))
+        self.apply_head_platform(
+            pitch=0.95 * nod,
+            roll=0.04 * np.sin(t * 0.8),
+        )
+
+        antenna_base = 0.10
+        antenna_bounce = 0.16 * self.damped_sine(t, speed=1.0, decay=0.7)
+        self.set_joint("right_antenna", antenna_base + antenna_bounce)
+        self.set_joint("left_antenna", antenna_base + antenna_bounce)
+
+    def positive_response_pose(self):
+        """
+        Positive branch:
+        - one/two readable encouraging nods
+        - then settles into attentive stillness
+        - antennas lift briefly, then calm down
+        """
+        t = self.elapsed_motion()
+        self.reset_pose()
+
+        if t < 2.4:
+            nod = self.damped_sine(t, speed=1.15, decay=0.9)
+            pitch = 1.15 * nod
+            antenna = 0.22 * self.damped_sine(t, speed=1.05, decay=0.65)
+        else:
+            pitch = 0.03 * np.sin(t * 0.45)
+            antenna = 0.025 * np.sin(t * 0.45)
+
+        self.set_joint("yaw_body", 0.025 * np.sin(t * 0.55))
+        self.apply_head_platform(
+            pitch=pitch,
+            roll=0.035 * np.sin(t * 0.5),
+        )
+
+        self.set_joint("right_antenna", antenna)
+        self.set_joint("left_antenna", antenna)
+
+    def negative_response_pose(self):
+        """
+        Negative branch:
+        - slow gaze aversion
+        - head lowers and tilts to side
+        - holds stillness while speaking
+        - antennas move very slowly, not cheerfully
+        """
+        t = self.elapsed_motion()
+        self.reset_pose()
+
+        ease = self.smoothstep(t / 1.15)
+
+        # Main expressive cue: look away and slightly down/side.
+        self.set_joint("yaw_body", -0.36 * ease)
+
+        # Hold a clear concerned pose after easing in.
+        base_pitch = -0.95 * ease
+        base_roll = 0.70 * ease
+
+        # Tiny breathing only, so it doesn't look robotic-wiggly.
+        breath = 0.025 * np.sin(t * 0.55)
+
+        self.apply_head_platform(
+            pitch=base_pitch + breath,
+            roll=base_roll,
+        )
+
+        # Slow asymmetric antennas: engaged, not excited.
+        self.set_joint("right_antenna", 0.10 * np.sin(t * 0.55))
+        self.set_joint("left_antenna", -0.10 * np.sin(t * 0.55 + 0.45))
+
+    def unclear_pose(self):
+        """
+        Mild attentive pause for unclear answers.
+        """
+        t = self.elapsed_motion()
+        self.reset_pose()
+
+        self.set_joint("yaw_body", 0.04 * np.sin(t * 0.5))
+        self.apply_head_platform(
+            pitch=0.10 * np.sin(t * 0.55),
+            roll=0.03 * np.sin(t * 0.4),
+        )
+
+        self.set_joint("right_antenna", 0.04 * np.sin(t * 0.7))
+        self.set_joint("left_antenna", 0.04 * np.sin(t * 0.7 + 0.3))
+
+    def outro_positive_pose(self):
+        """
+        Outro:
+        polite final nod, then returns toward idle friendliness.
+        """
+        t = self.elapsed_motion()
+        self.reset_pose()
+
+        if t < 2.0:
+            nod = self.damped_sine(t, speed=0.8, decay=0.8)
+            pitch = 0.85 * nod
+            antenna = 0.13 * self.damped_sine(t, speed=0.8, decay=0.7)
+        else:
+            pitch = 0.02 * np.sin(t * 0.4)
+            antenna = 0.02 * np.sin(t * 0.4)
+
+        self.set_joint("yaw_body", 0.02 * np.sin(t * 0.45))
+        self.apply_head_platform(
+            pitch=pitch,
+            roll=0.025 * np.sin(t * 0.4),
+        )
+
+        self.set_joint("right_antenna", antenna)
+        self.set_joint("left_antenna", antenna)
+
+    def update_motion(self):
+        if self.condition == "neutral":
+            self.neutral_pose()
+            return
+
+        if self.motion == "intro_positive":
+            self.intro_positive_pose()
+
+        elif self.motion == "question":
+            self.question_pose()
 
         elif self.motion == "positive":
-            self.set_joint("yaw_body", 0.08 * np.sin(t * 2.0))
-            self.set_joint("right_antenna", 0.35 * np.sin(t * 3.0))
-            self.set_joint("left_antenna", 0.35 * np.sin(t * 3.0))
+            self.positive_response_pose()
+
+        elif self.motion == "negative":
+            self.negative_response_pose()
+
+        elif self.motion == "unclear":
+            self.unclear_pose()
+
+        elif self.motion == "outro_positive":
+            self.outro_positive_pose()
 
         else:
-            self.reset_pose()
+            self.neutral_pose()
 
     def send_overlay(self, payload):
         self.overlay.send(payload)
 
-    def robot_say(self, text, branch="neutral", awaiting_after_speech=False):
+    def robot_say(self, text, branch="neutral", awaiting_after_speech=False, after_done=None):
         self.awaiting_input = False
 
         self.send_overlay({
@@ -205,6 +387,9 @@ class ReachyInterview:
                 "awaiting": awaiting_after_speech,
             })
 
+            if after_done:
+                after_done()
+
         speak_async(
             text=text,
             branch=branch,
@@ -212,15 +397,18 @@ class ReachyInterview:
             on_done=on_done,
         )
 
+    def schedule_next_question(self):
+        self.next_question_time = time.time() + 0.65
+
     def start_interview(self):
         self.question_index = -1
         self.next_question_time = None
 
         if self.condition == "empathetic":
-            self.motion = "positive"
+            self.set_motion("intro_positive")
             self.robot_say(INTRO, "positive", awaiting_after_speech=True)
         else:
-            self.motion = "idle"
+            self.set_motion("idle")
             self.robot_say(INTRO, "neutral", awaiting_after_speech=True)
 
     def ask_next_question(self):
@@ -228,15 +416,18 @@ class ReachyInterview:
 
         if self.question_index >= len(QUESTIONS):
             if self.condition == "empathetic":
-                self.motion = "positive"
+                self.set_motion("outro_positive")
                 self.robot_say(OUTRO, "positive", awaiting_after_speech=False)
             else:
-                self.motion = "idle"
+                self.set_motion("idle")
                 self.robot_say("Interview complete.", "neutral", awaiting_after_speech=False)
-
             return
 
-        self.motion = "idle"
+        if self.condition == "empathetic":
+            self.set_motion("question")
+        else:
+            self.set_motion("idle")
+
         self.robot_say(
             QUESTIONS[self.question_index]["question"],
             "neutral",
@@ -253,6 +444,7 @@ class ReachyInterview:
             return
 
         self.awaiting_input = False
+        self.next_question_time = None
 
         if self.question_index == -1:
             self.ask_next_question()
@@ -262,40 +454,38 @@ class ReachyInterview:
         branch = classify_answer(text)
 
         if self.condition == "neutral":
-            self.motion = "idle"
+            self.set_motion("idle")
             response = item["neutral"]
-            self.robot_say(response, "neutral", awaiting_after_speech=False)
+            response_branch = "neutral"
 
         elif branch == "negative":
-            self.motion = "negative"
+            self.set_motion("negative")
             response = f"{random.choice(BACKCHANNELS)} {item['negative']}"
-            self.robot_say(response, "negative", awaiting_after_speech=False)
+            response_branch = "negative"
 
         elif branch == "positive":
-            self.motion = "positive"
+            self.set_motion("positive")
             response = item["positive"]
-            self.robot_say(response, "positive", awaiting_after_speech=False)
+            response_branch = "positive"
 
         else:
-            self.motion = "idle"
+            self.set_motion("unclear")
             response = "Thank you for sharing that with me. Let's continue."
-            self.robot_say(response, "neutral", awaiting_after_speech=False)
+            response_branch = "neutral"
 
-        # Advance after the TTS finishes + small pause.
-        self.next_question_time = None
-
-        def delayed_next():
-            time.sleep(0.6)
-            self.next_question_time = time.time()
-
-        threading.Thread(target=delayed_next, daemon=True).start()
+        self.robot_say(
+            response,
+            response_branch,
+            awaiting_after_speech=False,
+            after_done=self.schedule_next_question,
+        )
 
     def set_condition(self, condition):
         if condition not in ["empathetic", "neutral"]:
             return
 
         self.condition = condition
-        self.motion = "idle"
+        self.set_motion("idle")
 
         self.send_overlay({
             "type": "status",

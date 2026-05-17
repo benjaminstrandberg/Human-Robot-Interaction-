@@ -36,7 +36,7 @@ POSITIVE_KEYWORDS = [
     "positive", "good", "happy", "great", "well", "fine",
     "managing", "okay", "chilling",
     "yes", "yeah", "some", "a bit", "played", "went out",
-    "called", "talked", "saw them", "texted"
+    "called", "talked", "saw them", "texted", "excellent"
 ]
 
 BACKCHANNELS = [

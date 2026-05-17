@@ -72,8 +72,8 @@ def run_edge_tts_cli(text, branch):
     cmd = [
         "edge-tts",
         "--voice", VOICE,
-        "--rate", rate,
-        "--pitch", pitch,
+        f"--rate={rate}",
+        f"--pitch={pitch}",
         "--text", text,
         "--write-media", mp3_path,
         "--write-subtitles", vtt_path,
@@ -85,8 +85,8 @@ def run_edge_tts_cli(text, branch):
         cmd = [
             sys.executable, "-m", "edge_tts",
             "--voice", VOICE,
-            "--rate", rate,
-            "--pitch", pitch,
+            f"--rate={rate}",
+            f"--pitch={pitch}",
             "--text", text,
             "--write-media", mp3_path,
             "--write-subtitles", vtt_path,
