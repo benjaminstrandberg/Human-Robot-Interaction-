@@ -178,7 +178,6 @@ class Overlay(QWidget):
         self.input.setEnabled(enabled)
         self.submit_btn.setEnabled(enabled and bool(self.input.text().strip()))
 
-        # Keep Reachy box neutral. Only the input lights up.
         self.subtitle.setStyleSheet("""
             color: white;
             background-color: #0f172a;
@@ -316,7 +315,6 @@ class Overlay(QWidget):
                 self.set_input_enabled(False)
 
             elif kind == "speech_done":
-                # self.subtitle.setText(msg.get("text", ""))
                 self.set_input_enabled(awaiting)
 
             elif kind == "status":

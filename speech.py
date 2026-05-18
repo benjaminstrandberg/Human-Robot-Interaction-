@@ -109,7 +109,6 @@ def reveal_cue_text(cue_text, cue_duration, on_subtitle):
         return
 
     # Reveal letters only while this cue is actually being spoken.
-    # Leave a tiny end hold so it does not finish at the exact last millisecond.
     reveal_duration = max(0.12, cue_duration * 0.88)
     delay = reveal_duration / max(len(cue_text), 1)
 
@@ -142,7 +141,7 @@ def speak_blocking(text, branch="neutral", on_subtitle=None, on_done=None):
 
         audio_thread.start()
 
-        # Playsound usually has a tiny startup delay.
+        # Playsound delay
         AUDIO_START_DELAY = 0.35
         time.sleep(AUDIO_START_DELAY)
 
@@ -158,8 +157,6 @@ def speak_blocking(text, branch="neutral", on_subtitle=None, on_done=None):
                 cue_duration = max(0.1, cue["end"] - cue["start"])
                 reveal_cue_text(cue["text"], cue_duration, on_subtitle)
 
-                # Important: DO NOTHING after cue ends.
-                # This preserves the little breathing pauses.
         else:
             if on_subtitle:
                 on_subtitle(text)

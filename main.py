@@ -17,8 +17,6 @@ from classifier import classify_answer_llm
 
 from script_data import (
     QUESTIONS,
-    NEGATIVE_KEYWORDS,
-    POSITIVE_KEYWORDS,
     BACKCHANNELS,
     INTRO,
     OUTRO,
@@ -40,14 +38,6 @@ def classify_answer(text):
     if llm_label is not None:
         print(f"[Classifier] LLM Label: {llm_label}")
         return llm_label
-    
-    text = text.lower()
-
-    if any(word in text for word in NEGATIVE_KEYWORDS):
-        return "negative"
-
-    if any(word in text for word in POSITIVE_KEYWORDS):
-        return "positive"
 
     return "unclear"
 
@@ -194,19 +184,9 @@ class ReachyInterview:
         self.set_joint("stewart_6", -0.028 * pitch)
 
     def neutral_pose(self):
-        """
-        Condition 2:
-        Cold mechanical baseline.
-        Direct gaze, no antennas, no head motion.
-        """
         self.reset_pose()
 
     def question_pose(self):
-        """
-        Empathetic condition while asking questions:
-        mostly neutral/direct, but with tiny life.
-        Keeps attention on the question instead of emotional reaction.
-        """
         t = self.elapsed_motion()
         self.reset_pose()
 
@@ -216,14 +196,10 @@ class ReachyInterview:
             roll=0.025 * np.sin(t * 0.6),
         )
 
-        self.set_joint("right_antenna", 0.035 * np.sin(t * 0.9))
-        self.set_joint("left_antenna", 0.035 * np.sin(t * 0.9 + 0.2))
+        self.set_joint("right_antenna", 0.09 * np.sin(t * 0.9))
+        self.set_joint("left_antenna", 0.09 * np.sin(t * 0.9 + 0.2))
 
     def intro_positive_pose(self):
-        """
-        Script: big smile + slight head nod.
-        We approximate face with a friendly greeting nod and warm antenna lift.
-        """
         t = self.elapsed_motion()
         self.reset_pose()
 
@@ -241,19 +217,13 @@ class ReachyInterview:
         self.set_joint("left_antenna", antenna_base + antenna_bounce)
 
     def positive_response_pose(self):
-        """
-        Positive branch:
-        - one/two readable encouraging nods
-        - then settles into attentive stillness
-        - antennas lift briefly, then calm down
-        """
         t = self.elapsed_motion()
         self.reset_pose()
 
         if t < 2.4:
             nod = self.damped_sine(t, speed=1.15, decay=0.9)
             pitch = 1.15 * nod
-            antenna = 0.22 * self.damped_sine(t, speed=1.05, decay=0.65)
+            antenna = 0.28 * self.damped_sine(t, speed=1.05, decay=0.65)
         else:
             pitch = 0.03 * np.sin(t * 0.45)
             antenna = 0.025 * np.sin(t * 0.45)
@@ -268,36 +238,27 @@ class ReachyInterview:
         self.set_joint("left_antenna", antenna)
 
     def negative_response_pose(self):
-        """
-        Negative branch:
-        - slow gaze aversion
-        - head lowers and tilts to side
-        - holds stillness while speaking
-        - antennas move very slowly, not cheerfully
-        """
         t = self.elapsed_motion()
         self.reset_pose()
 
         ease = self.smoothstep(t / 1.15)
 
-        # Main expressive cue: look away and slightly down/side.
-        self.set_joint("yaw_body", -0.36 * ease)
-
-        # Hold a clear concerned pose after easing in.
-        base_pitch = -0.95 * ease
-        base_roll = 0.70 * ease
-
-        # Tiny breathing only, so it doesn't look robotic-wiggly.
-        breath = 0.025 * np.sin(t * 0.55)
+        self.set_joint("yaw_body", -0.20 * ease)
 
         self.apply_head_platform(
-            pitch=base_pitch + breath,
-            roll=base_roll,
+            pitch=-0.55 * ease,
+            roll=0.45 * ease,
         )
 
-        # Slow asymmetric antennas: engaged, not excited.
-        self.set_joint("right_antenna", 0.10 * np.sin(t * 0.55))
-        self.set_joint("left_antenna", -0.10 * np.sin(t * 0.55 + 0.45))
+        self.set_joint(
+            "right_antenna",
+            -0.22 + 0.08 * np.sin(t * 0.45)
+        )
+
+        self.set_joint(
+            "left_antenna",
+            -0.28 - 0.06 * np.sin(t * 0.40 + 0.5)
+        )
 
     def unclear_pose(self):
         """
@@ -316,10 +277,6 @@ class ReachyInterview:
         self.set_joint("left_antenna", 0.04 * np.sin(t * 0.7 + 0.3))
 
     def outro_positive_pose(self):
-        """
-        Outro:
-        polite final nod, then returns toward idle friendliness.
-        """
         t = self.elapsed_motion()
         self.reset_pose()
 

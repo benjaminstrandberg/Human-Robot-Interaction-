@@ -19,6 +19,7 @@ def classify_answer_llm(answer):
                         "Return exactly one word only: positive, negative, or unclear. "
                         "Negative includes stress, tiredness, poor sleep, loneliness, lack of time, isolation, anxiety, overwhelm, sadness, or struggle. "
                         "Positive includes feeling good, managing, support from friends/family, hobbies, rest, progress, or optimism."
+                        "Also make sure to understand idiomatic language, reading between the lines, and so on."
                     ),
                 },
                 {
